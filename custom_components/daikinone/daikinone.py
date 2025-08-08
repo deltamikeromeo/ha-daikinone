@@ -251,26 +251,26 @@ class DaikinOne:
     def get_thermostats(self) -> dict[str, DaikinThermostat]:
         return copy.deepcopy(self.__thermostats)
 
-    async def set_thermostat_mode(self, device_id, target_mode):
-        idu_operating_mode = self._map_mode(target_mode)
+    async def set_thermostat_mode(self, thermostat_id: str, mode: DaikinThermostatMode) -> None:
+        idu_operating_mode = mode.value
         request_body = {
             "iduOperatingMode": idu_operating_mode,
             "iduOnOff": True,
         }
 
-        logging.debug(f"Sending Daikin API request: device_id={device_id}, body={request_body}")
+        logging.debug(f"Sending Daikin API request: thermostat_id={thermostat_id}, body={request_body}")
 
         try:
             await self.__req(
                 method="PUT",
-                url=f"https://api.daikinskyport.com/deviceData/{device_id}",
+                url=f"https://api.daikinskyport.com/deviceData/{thermostat_id}",
                 body=request_body,
             )
         except DaikinServiceException as e:
             logging.error(f"Daikin API request failed: {e}")
             # Pass status from original exception
             raise DaikinServiceException(
-                f"Failed to send request to Daikin API: method=PUT url=https://api.daikinskyport.com/deviceData/{device_id} body={request_body}, error={e}",
+                f"Failed to send request to Daikin API: method=PUT url={DAIKIN_API_URL_DEVICE_DATA}/{device_id} body={request_body}, error={e}",
                 status=e.status
             )
 
@@ -625,12 +625,24 @@ class DaikinOne:
                 )
 
     def _map_mode(self, target_mode):
-        # Map Home Assistant mode to Daikin API value
-        # Example mapping, adjust as needed:
+        """
+        Map Home Assistant mode to Daikin API value.
+
+        Raises:
+            ValueError: If the target_mode is not recognized.
+
+        Example mapping:
+            "off" -> 0
+            "heat" -> 1
+            "cool" -> 2
+            "auto" -> 3
+        """
         mode_map = {
             "off": 0,
             "heat": 1,
             "cool": 2,
             "auto": 3,
         }
-        return mode_map.get(target_mode, 0)
+        if target_mode not in mode_map:
+            raise ValueError(f"Unknown target_mode '{target_mode}'. Valid modes are: {list(mode_map.keys())}")
+        return mode_map[target_mode]
