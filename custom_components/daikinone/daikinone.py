@@ -251,13 +251,28 @@ class DaikinOne:
     def get_thermostats(self) -> dict[str, DaikinThermostat]:
         return copy.deepcopy(self.__thermostats)
 
-    async def set_thermostat_mode(self, thermostat_id: str, mode: DaikinThermostatMode) -> None:
-        """Set thermostat mode"""
-        await self.__req(
-            url=f"{DAIKIN_API_URL_DEVICE_DATA}/{thermostat_id}",
-            method="PUT",
-            body={"mode": mode.value},
-        )
+    async def set_thermostat_mode(self, device_id, target_mode):
+        idu_operating_mode = self._map_mode(target_mode)
+        request_body = {
+            "iduOperatingMode": idu_operating_mode,
+            "iduOnOff": True,
+        }
+
+        logging.debug(f"Sending Daikin API request: device_id={device_id}, body={request_body}")
+
+        try:
+            await self.__req(
+                method="PUT",
+                url=f"https://api.daikinskyport.com/deviceData/{device_id}",
+                body=request_body,
+            )
+        except DaikinServiceException as e:
+            logging.error(f"Daikin API request failed: {e}")
+            # Pass status from original exception
+            raise DaikinServiceException(
+                f"Failed to send request to Daikin API: method=PUT url=https://api.daikinskyport.com/deviceData/{device_id} body={request_body}, error={e}",
+                status=e.status
+            )
 
     async def set_thermostat_home_set_points(
         self,
@@ -608,3 +623,14 @@ class DaikinOne:
                     f"Failed to send request to Daikin API: method={method} url={url} body={json.dumps(body)}, response_code={response.status} response_body={await response.text()}",
                     status=response.status,
                 )
+
+    def _map_mode(self, target_mode):
+        # Map Home Assistant mode to Daikin API value
+        # Example mapping, adjust as needed:
+        mode_map = {
+            "off": 0,
+            "heat": 1,
+            "cool": 2,
+            "auto": 3,
+        }
+        return mode_map.get(target_mode, 0)
